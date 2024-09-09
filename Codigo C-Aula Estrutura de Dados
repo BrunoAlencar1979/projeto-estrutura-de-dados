@@ -1,0 +1,341 @@
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <termios.h>
+#include <unistd.h>
+
+#define MAX_NOME 50
+#define MAX_EMAIL 50
+#define MAX_SENHA 20
+#define MAX_CPF 15
+#define MAX_ENDERECO 100
+#define MAX_CEP 10
+#define MAX_CIDADE 30
+#define MAX_BAIRRO 30
+#define EMPRESA "ABK Bus Lines"
+#define ADMIN_SENHA "admin"
+
+// Estrutura para armazenar os dados do usuário
+typedef struct {
+    char nome[MAX_NOME];
+    char email[MAX_EMAIL];
+    char senha[MAX_SENHA];
+    char cpf[MAX_CPF];
+    char cep[MAX_CEP];
+    char rua[MAX_ENDERECO];
+    char cidade[MAX_CIDADE];
+    char bairro[MAX_BAIRRO];
+} Usuario;
+
+// Variáveis globais
+Usuario usuarios[100];  // Vetor para armazenar usuários cadastrados
+int num_usuarios = 0;   // Contador de usuários cadastrados
+int passagens_vendidas = 0;  // Contador de passagens vendidas
+float total_vendas = 0;      // Total arrecadado com as passagens
+
+// Declaração das funções
+void digitarSenha(char senha[]);
+int verificarCPF(char cpf[]);
+int verificarEmail(char email[]);
+int cadastroUsuario();
+void verInformacoes(Usuario *usuario);
+void relatorioPassagensVendidas();
+void mostrarInformacoesViagem(char nome[], char cpf[], char origem[], char destino[], float valor, int horas_embarque, int minutos_embarque, int duracao_horas, int duracao_minutos, float distancia, int atraso_horas);
+void menuPassagens(int usuario_encontrado);
+void loginAdministrador();
+void loginUsuario();
+void exibirTicket(Usuario *usuario, char origem[], char destino[], float valor, int horas_embarque, int minutos_embarque, int duracao_horas, int duracao_minutos, int atraso_horas);
+
+// Função para esconder a senha digitada
+void digitarSenha(char senha[]) {
+    struct termios oldt, newt;
+    int i = 0;
+    char ch;
+
+    // Desabilita o eco de terminal
+    tcgetattr(STDIN_FILENO, &oldt);  // Salva a configuração atual do terminal
+    newt = oldt;
+    newt.c_lflag &= ~(ECHO);  // Desativa o eco
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);  // Aplica a nova configuração
+
+    // Leitura da senha com eco desativado
+    while ((ch = getchar()) != '\n' && i < MAX_SENHA - 1) {
+        if (ch == 127 || ch == '\b') {  // Tratamento de backspace
+            if (i > 0) {
+                printf("\b \b");  // Remove o último asterisco
+                i--;
+            }
+        } else {
+            senha[i++] = ch;
+            printf("*");  // Exibe um asterisco para cada caractere digitado
+        }
+    }
+
+    senha[i] = '\0';  // Termina a string da senha
+
+    // Restaura a configuração original do terminal
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    printf("\n");
+}
+
+// Função para verificar se o CPF tem exatamente 11 dígitos
+int verificarCPF(char cpf[]) {
+    if (strlen(cpf) != 11) {
+        return 0;  // CPF deve ter exatamente 11 dígitos
+    }
+
+    // Verifica se todos os caracteres são dígitos
+    for (int i = 0; i < 11; i++) {
+        if (!isdigit(cpf[i])) {
+            return 0;  // Se encontrar um caractere que não é dígito, retorna 0
+        }
+    }
+    return 1;  // CPF válido
+}
+
+// Função para verificar se o e-mail contém o caractere '@'
+int verificarEmail(char email[]) {
+    return strchr(email, '@') != NULL;  // Retorna 1 se encontrar '@', 0 caso contrário
+}
+
+// Função para realizar o cadastro do usuário
+int cadastroUsuario() {
+    Usuario novo_usuario;
+    char confirmar_senha[MAX_SENHA];
+
+    printf("\n--- Cadastro de Usuário ---\n");
+
+    // Captura o nome do usuário
+    printf("Nome: ");
+    fgets(novo_usuario.nome, MAX_NOME, stdin);
+    novo_usuario.nome[strcspn(novo_usuario.nome, "\n")] = 0;
+
+    // Captura o email
+    printf("Email: ");
+    fgets(novo_usuario.email, MAX_EMAIL, stdin);
+    novo_usuario.email[strcspn(novo_usuario.email, "\n")] = 0;
+
+    // Captura a senha
+    printf("Senha: ");
+    digitarSenha(novo_usuario.senha);
+
+    printf("Confirme a senha: ");
+    digitarSenha(confirmar_senha);
+
+    // Verifica se as senhas são iguais
+    if (strcmp(novo_usuario.senha, confirmar_senha) != 0) {
+        printf("As senhas não são iguais. Tente novamente.\n");
+        return -1;
+    }
+
+    // Captura o CPF
+    printf("CPF: ");
+    fgets(novo_usuario.cpf, MAX_CPF, stdin);
+    novo_usuario.cpf[strcspn(novo_usuario.cpf, "\n")] = 0;
+
+    // Captura o endereço do usuário
+    printf("CEP: ");
+    fgets(novo_usuario.cep, MAX_CEP, stdin);
+    novo_usuario.cep[strcspn(novo_usuario.cep, "\n")] = 0;
+
+    printf("Rua: ");
+    fgets(novo_usuario.rua, MAX_ENDERECO, stdin);
+    novo_usuario.rua[strcspn(novo_usuario.rua, "\n")] = 0;
+
+    printf("Cidade: ");
+    fgets(novo_usuario.cidade, MAX_CIDADE, stdin);
+    novo_usuario.cidade[strcspn(novo_usuario.cidade, "\n")] = 0;
+
+    printf("Bairro: ");
+    fgets(novo_usuario.bairro, MAX_BAIRRO, stdin);
+    novo_usuario.bairro[strcspn(novo_usuario.bairro, "\n")] = 0;
+
+    // Armazena o novo usuário
+    usuarios[num_usuarios] = novo_usuario;
+    num_usuarios++;
+
+    printf("Usuário cadastrado com sucesso!\n");
+    return num_usuarios - 1;
+}
+
+// Função para exibir o ticket da passagem
+void exibirTicket(Usuario *usuario, char origem[], char destino[], float valor, int horas_embarque, int minutos_embarque, int duracao_horas, int duracao_minutos, int atraso_horas) {
+    int hora_chegada = horas_embarque + duracao_horas;
+    int minuto_chegada = minutos_embarque + duracao_minutos;
+
+    // Ajusta o horário de chegada
+    if (minuto_chegada >= 60) {
+        minuto_chegada -= 60;
+        hora_chegada += 1;
+    }
+
+    if (hora_chegada >= 24) {
+        hora_chegada -= 24;
+    }
+
+    printf("\n--- Ticket de Viagem ---\n");
+    printf("Empresa: %s\n", EMPRESA);
+    printf("Nome do Passageiro: %s\n", usuario->nome);
+    printf("CPF: %s\n", usuario->cpf);
+    printf("Origem: %s\n", origem);
+    printf("Destino: %s\n", destino);
+    printf("Valor da Passagem: R$ %.2f\n", valor);
+    printf("Horário de Embarque: %02d:%02d\n", horas_embarque, minutos_embarque);
+    printf("Horário de Chegada: %02d:%02d\n", hora_chegada, minuto_chegada);
+    if (atraso_horas > 0) {
+        printf("Atenção: Esta viagem tem um atraso de %d horas!\n", atraso_horas);
+    }
+    printf("---------------------------\n");
+}
+
+// Função para exibir o menu de passagens
+void menuPassagens(int usuario_encontrado) {
+    int opcao_viagem;
+    int horas_embarque, minutos_embarque, atraso_horas = 0;
+    char data_embarque[11];
+    Usuario *usuario = &usuarios[usuario_encontrado];
+
+    do {
+        printf("\n--- Menu de Passagens ---\n");
+        printf("1. Vitória -> Linhares (R$ 78.05, 2h30min)\n");
+        printf("2. Vitória -> Jaguaré (R$ 113.88, 3h45min)\n");
+        printf("3. Vitória -> São Mateus (R$ 123.49, 4h)\n");
+        printf("0. Voltar ao Menu Principal\n");
+        printf("Escolha uma viagem: ");
+        scanf("%d", &opcao_viagem);
+        getchar();  // Limpa o buffer de entrada
+
+        switch (opcao_viagem) {
+            case 1:
+                atraso_horas = 4;
+                printf("Atenção: Esta viagem tem um atraso de 4 horas!\n");
+                break;
+            case 2:
+            case 3:
+                atraso_horas = 0;
+                break;
+            case 0:
+                return;  // Volta ao menu principal
+            default:
+                printf("Opção inválida. Tente novamente.\n");
+                continue;
+        }
+
+        // Pergunta a data e o horário de embarque
+        printf("Digite a data de embarque (dd/mm/aaaa): ");
+        fgets(data_embarque, sizeof(data_embarque), stdin);
+
+        printf("Digite o horário de embarque (hh:mm): ");
+        scanf("%d:%d", &horas_embarque, &minutos_embarque);
+        getchar();  // Limpa o buffer de entrada
+
+        // Confirma a compra da passagem
+        printf("Confirmar compra? (s/n): ");
+        char confirmacao = getchar();
+        getchar();  // Limpa o buffer de entrada
+
+        if (confirmacao == 's' || confirmacao == 'S') {
+            switch (opcao_viagem) {
+                case 1:
+                    exibirTicket(usuario, "Vitória", "Linhares", 78.05, horas_embarque, minutos_embarque, 2, 30, atraso_horas);
+                    total_vendas += 78.05;
+                    passagens_vendidas++;
+                    break;
+                case 2:
+                    exibirTicket(usuario, "Vitória", "Jaguaré", 113.88, horas_embarque, minutos_embarque, 3, 45, atraso_horas);
+                    total_vendas += 113.88;
+                    passagens_vendidas++;
+                    break;
+                case 3:
+                    exibirTicket(usuario, "Vitória", "São Mateus", 123.49, horas_embarque, minutos_embarque, 4, 0, atraso_horas);
+                    total_vendas += 123.49;
+                    passagens_vendidas++;
+                    break;
+            }
+        }
+    } while (opcao_viagem != 0);
+}
+
+// Função para o login do administrador e exibição do relatório de vendas
+void loginAdministrador() {
+    char senha_admin[MAX_SENHA];
+
+    printf("\n--- Login de Administrador ---\n");
+    printf("Digite a senha de administrador: ");
+    digitarSenha(senha_admin);
+
+    if (strcmp(senha_admin, ADMIN_SENHA) == 0) {
+        printf("\n--- Relatório de Vendas ---\n");
+        printf("Total de passagens vendidas: %d\n", passagens_vendidas);
+        printf("Total arrecadado: R$ %.2f\n", total_vendas);
+    } else {
+        printf("Senha de administrador incorreta!\n");
+    }
+}
+
+// Função para login do usuário
+void loginUsuario() {
+    char email[MAX_EMAIL];
+    char senha[MAX_SENHA];
+    int usuario_encontrado = -1;
+
+    printf("\n--- Login de Usuário ---\n");
+    printf("Digite o seu e-mail: ");
+    fgets(email, MAX_EMAIL, stdin);
+    email[strcspn(email, "\n")] = 0;
+
+    printf("Digite a sua senha: ");
+    digitarSenha(senha);
+
+    for (int i = 0; i < num_usuarios; i++) {
+        if (strcmp(usuarios[i].email, email) == 0 && strcmp(usuarios[i].senha, senha) == 0) {
+            usuario_encontrado = i;
+            break;
+        }
+    }
+
+    if (usuario_encontrado != -1) {
+        printf("Bem-vindo(a), %s! Login efetuado com sucesso.\n", usuarios[usuario_encontrado].nome);
+        menuPassagens(usuario_encontrado);
+    } else {
+        printf("E-mail ou senha incorretos. Tente novamente.\n");
+    }
+}
+
+// Função principal
+int main() {
+    int opcao_principal;
+
+    printf("Bem-vindo à %s!\n", EMPRESA);
+
+    do {
+        printf("\n--- Menu Principal | %s ---\n", EMPRESA);
+        printf("1. Login como Usuário\n");
+        printf("2. Login como Administrador\n");
+        printf("3. Cadastro de Usuário\n");
+        printf("0. Sair\n");
+        printf("Digite sua opção: ");
+        scanf("%d", &opcao_principal);
+        getchar();  // Limpa o buffer de entrada
+
+        switch (opcao_principal) {
+            case 1:
+                loginUsuario();
+                break;
+            case 2:
+                loginAdministrador();
+                break;
+            case 3:
+                cadastroUsuario();
+                break;
+            case 0:
+                printf("Saindo do programa...\n");
+                break;
+            default:
+                printf("Opção inválida! Por favor, selecione uma opção válida.\n");
+                break;
+        }
+    } while (opcao_principal != 0);
+
+    return 0;
+}
